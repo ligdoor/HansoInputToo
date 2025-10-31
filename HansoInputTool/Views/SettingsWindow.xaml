@@ -1,0 +1,65 @@
+﻿<Window x:Class="HansoInputTool.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="料金設定" SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+
+    <!-- ↓↓↓ ルート要素をGridに変更し、背景色を強制的に設定 ↓↓↓ -->
+    <Grid Background="{StaticResource BgBrush}">
+        <StackPanel Margin="15">
+            <ItemsControl ItemsSource="{Binding Rates}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <GroupBox Header="{Binding Key}" Foreground="{StaticResource TextBrush}" FontWeight="Bold" Margin="0,5">
+                            <StackPanel Margin="10">
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="基本料金" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Text="{Binding Value.BaseFee, UpdateSourceTrigger=PropertyChanged}" MinWidth="150"/>
+                                </Grid>
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="走行料金" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Text="{Binding Value.MileageFee, UpdateSourceTrigger=PropertyChanged}" MinWidth="150"/>
+                                </Grid>
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="深夜固定" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Text="{Binding Value.LateNightFixedFee, UpdateSourceTrigger=PropertyChanged}" MinWidth="150"/>
+                                </Grid>
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="深夜単価" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Text="{Binding Value.LateNightUnitFee, UpdateSourceTrigger=PropertyChanged}" MinWidth="150"/>
+                                </Grid>
+                            </StackPanel>
+                        </GroupBox>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+                <Button Content="キャンセル" Background="{StaticResource ButtonSecondaryBgBrush}"
+                        Command="{Binding CancelCommand}"
+                        CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}" Margin="0,0,10,0" Style="{StaticResource NormalButton}"/>
+                <Button Content="保存" Background="{StaticResource GreenBrush}" 
+                        Command="{Binding SaveCommand}"
+                        CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}" Style="{StaticResource NormalButton}"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>
