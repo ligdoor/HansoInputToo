@@ -32,7 +32,7 @@ namespace HansoInputTool.ViewModels
 
         #region Constants and Paths
         private const string AppName = "HansoInputTool";
-        private const string CurrentVersion = "0.2.5"; // バージョンアップ
+        private const string CurrentVersion = "0.2.5";
         private const string GithubToken = "";
         private const string VersionInfoUrl = "https://raw.githubusercontent.com/ligdoor/HansoInputToo/refs/heads/master/version.json";
         private const string ReleasesPageUrl = "https://github.com/ligdoor/HansoInputToo/releases";
@@ -277,37 +277,26 @@ namespace HansoInputTool.ViewModels
             IsBusy = true;
             var progressVM = new ProgressWindowViewModel();
             var progressWindow = new ProgressWindow(progressVM) { Owner = Application.Current.MainWindow };
+
+            // 進捗をUIに通知するための仕組み
+            var progress = new Progress<TransferProgressReport>(report => {
+                if (!string.IsNullOrEmpty(report.Message))
+                {
+                    progressVM.AppendLog(report.Message);
+                }
+                progressVM.UpdateProgress(report.Current, report.Total, "");
+            });
+
             progressWindow.Show();
 
             try
             {
-                await Task.Run(() =>
-                {
-                    _excelHandler.Save();
-                    string folderName = $"{period}期 {month}月 R{rNum} アルス搬送・霊柩車　実績月報";
-                    string finalOutputDir = Path.Combine(outputDir, folderName);
-                    Directory.CreateDirectory(finalOutputDir);
-                    string geppoFilename = $"{period}期 {month}月 R{rNum} アルス搬送・霊柩車　実績月報.xlsx";
-                    string geppoFilepath = Path.Combine(finalOutputDir, geppoFilename);
-                    File.Copy(WorkInputFilePath, geppoFilepath, true);
-                    string shukeiFilename = $"{period}期 {month}月 R{rNum} アルス搬送・霊柩車　実績月報集計.xlsx";
-                    string shukeiFilepath = Path.Combine(finalOutputDir, shukeiFilename);
-                    File.Copy(BundledTemplateFilePath, shukeiFilepath, true);
-                    using var wbGeppo = new ExcelPackage(new FileInfo(geppoFilepath));
-                    using var wbShukei = new ExcelPackage(new FileInfo(shukeiFilepath));
-                    Log("--- 全シートの転記処理を開始 ---");
-                    Application.Current.Dispatcher.Invoke(() => progressVM.AppendLog("--- 全シートの転記処理を開始 ---"));
-                    var sheetsToProcess = _allSheetNames?.Where(s => !s.Contains("登録")).ToList() ?? new List<string>();
-                    int processedCount = 0;
-                    foreach (var sheetName in sheetsToProcess)
-                    {
-                        Application.Current.Dispatcher.Invoke(() => progressVM.UpdateProgress(processedCount, sheetsToProcess.Count, $"処理中: {sheetName} ..."));
-                        processedCount++;
-                        Log($"[{sheetName}] の処理が完了しました。");
-                    }
-                    wbShukei.Save();
-                    wbGeppo.Save();
-                });
+                // 先に入力ファイルを保存
+                _excelHandler.Save();
+
+                var transferService = new TransferService();
+                await transferService.ExecuteAsync(WorkInputFilePath, BundledTemplateFilePath, outputDir, period, month, rNum, _allSheetNames, Rates, progress);
+
                 Log("========\n転記完了\n========");
                 Period = Month = RNumber = string.Empty;
                 progressVM.Complete("2つのファイルの作成が完了しました。");
