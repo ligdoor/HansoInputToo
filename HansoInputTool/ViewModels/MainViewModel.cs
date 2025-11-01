@@ -16,11 +16,15 @@ using HansoInputTool.ViewModels.Base;
 using HansoInputTool.Views;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using NLog;
 using OfficeOpenXml;
+
 namespace HansoInputTool.ViewModels
 {
     public class MainViewModel : ObservableObject
     {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
         #region Events for View Interaction
         public event Action RequestFocusNormalTab;
         public event Action RequestFocusEastTab;
@@ -28,14 +32,10 @@ namespace HansoInputTool.ViewModels
 
         #region Constants and Paths
         private const string AppName = "HansoInputTool";
-        // ↓↓↓ バージョン番号は、リリースごとに更新してください
-        private const string CurrentVersion = "0.2.0";
-
-        // ↓↓↓ GitHubの情報を設定 ↓↓↓
-        private const string GithubToken = ""; // privateリポジトリの場合に設定
-        private const string VersionInfoUrl = "https://raw.githubusercontent.com/ligdoor/Transportation-app/refs/heads/main/version.json";
-        private const string ReleasesPageUrl = "https://github.com/ligdoor/Transportation-app/releases";
-
+        private const string CurrentVersion = "0.2.5"; // バージョンアップ
+        private const string GithubToken = "";
+        private const string VersionInfoUrl = "https://raw.githubusercontent.com/ligdoor/HansoInputToo/refs/heads/master/version.json";
+        private const string ReleasesPageUrl = "https://github.com/ligdoor/HansoInputToo/releases";
         private static readonly string AppDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AppName);
         private static readonly string RatesFilePath = Path.Combine(AppDataPath, "rates.json");
         private static readonly string WorkInputFilePath = Path.Combine(AppDataPath, "Input_work.xlsx");
@@ -48,33 +48,21 @@ namespace HansoInputTool.ViewModels
         private ExcelHandler _excelHandler;
         public Dictionary<string, RateInfo> Rates { get; set; }
         private List<string> _allSheetNames;
-
         private readonly StringBuilder _logBuilder = new();
         private string _logText;
         public string LogText { get => _logText; private set => SetProperty(ref _logText, value); }
 
         private int _selectedTabIndex = 0;
-        public int SelectedTabIndex
-        {
-            get => _selectedTabIndex;
-            set => SetProperty(ref _selectedTabIndex, value);
-        }
+        public int SelectedTabIndex { get => _selectedTabIndex; set => SetProperty(ref _selectedTabIndex, value); }
 
         public ObservableCollection<string> NormalSheets { get; } = new();
         private string _selectedNormalSheet;
-        public string SelectedNormalSheet
-        {
-            get => _selectedNormalSheet;
-            set { if (SetProperty(ref _selectedNormalSheet, value)) { UpdatePreview(); OnPropertyChanged(nameof(IsOotsukiSheet)); } }
-        }
+        public string SelectedNormalSheet { get => _selectedNormalSheet; set { if (SetProperty(ref _selectedNormalSheet, value)) { UpdatePreview(); OnPropertyChanged(nameof(IsOotsukiSheet)); } } }
         public ObservableCollection<RowData> PreviewData { get; } = new();
         public ICollectionView PreviewDataView { get; }
-
         private RowData _selectedRow;
         public RowData SelectedRow { get => _selectedRow; set => SetProperty(ref _selectedRow, value); }
-
         public bool IsOotsukiSheet => SelectedNormalSheet?.Contains("大月") ?? false;
-
         private string _normalDay;
         public string NormalDay { get => _normalDay; set => SetProperty(ref _normalDay, value); }
         private string _normalYuryoKm;
@@ -89,17 +77,7 @@ namespace HansoInputTool.ViewModels
         public ObservableCollection<string> EastSheets { get; } = new();
         private readonly List<string> _registeredEastSheets = new();
         private string _selectedEastSheet;
-        public string SelectedEastSheet
-        {
-            get => _selectedEastSheet;
-            set
-            {
-                if (SetProperty(ref _selectedEastSheet, value))
-                {
-                    UpdateEastSheetStatus();
-                }
-            }
-        }
+        public string SelectedEastSheet { get => _selectedEastSheet; set { if (SetProperty(ref _selectedEastSheet, value)) { UpdateEastSheetStatus(); } } }
         private string _eastSheetStatus = "（未登録）";
         public string EastSheetStatus { get => _eastSheetStatus; set => SetProperty(ref _eastSheetStatus, value); }
         private bool _isEastSheetRegistered = false;
@@ -121,7 +99,6 @@ namespace HansoInputTool.ViewModels
         public string Month { get => _month; set => SetProperty(ref _month, value); }
         private string _rNumber;
         public string RNumber { get => _rNumber; set => SetProperty(ref _rNumber, value); }
-
         private bool _isBusy;
         public bool IsBusy { get => _isBusy; set => SetProperty(ref _isBusy, value); }
         #endregion
@@ -159,6 +136,7 @@ namespace HansoInputTool.ViewModels
         {
             try
             {
+                Logger.Info("アプリケーションの初期化を開始します。");
                 Directory.CreateDirectory(AppDataPath);
 
                 if (!File.Exists(RatesFilePath)) File.Copy(BundledRatesFilePath, RatesFilePath, true);
@@ -183,10 +161,12 @@ namespace HansoInputTool.ViewModels
                     }
                 }
                 UpdatePreview();
+                Logger.Info("アプリケーションの初期化が完了しました。");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"アプリケーションの初期化中にエラーが発生しました。\n{ex.Message}", "初期化エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                Logger.Error(ex, "アプリケーションの初期化中に致命的なエラーが発生しました。");
+                MessageBox.Show($"アプリケーションの初期化中にエラーが発生しました。\n詳細はログファイルを確認してください。", "初期化エラー", MessageBoxButton.OK, MessageBoxImage.Error);
                 Application.Current.Shutdown();
             }
         }
@@ -194,55 +174,27 @@ namespace HansoInputTool.ViewModels
         private void OnWindowClosing(object parameter)
         {
             if (parameter is not CancelEventArgs e) return;
-
-            if (IsBusy)
-            {
-                MessageBox.Show("転記処理が実行中です。終了できません。", "処理中", MessageBoxButton.OK, MessageBoxImage.Warning);
-                e.Cancel = true;
-                return;
-            }
+            if (IsBusy) { MessageBox.Show("転記処理が実行中です。終了できません。", "処理中", MessageBoxButton.OK, MessageBoxImage.Warning); e.Cancel = true; return; }
             var result = MessageBox.Show("入力中のデータはファイルに保存されません。\nツールを終了しますか？", "終了確認", MessageBoxButton.OKCancel, MessageBoxImage.Question);
-            if (result == MessageBoxResult.Cancel)
-            {
-                e.Cancel = true;
-            }
-            else
-            {
-                if (File.Exists(WorkInputFilePath))
-                {
-                    try { File.Delete(WorkInputFilePath); } catch { /* ignore */ }
-                }
-            }
+            if (result == MessageBoxResult.Cancel) { e.Cancel = true; } else { if (File.Exists(WorkInputFilePath)) { try { File.Delete(WorkInputFilePath); } catch (Exception ex) { Logger.Warn(ex, "作業ファイルの削除に失敗しました。"); } } }
         }
 
         private void PopulateSheetCombos()
         {
             NormalSheets.Clear();
             EastSheets.Clear();
-            _allSheetNames?.ForEach(s =>
-            {
-                if (s.Contains("寝台車") || s.Contains("霊柩車")) NormalSheets.Add(s);
-                if (s.Contains("東日本")) EastSheets.Add(s);
-            });
+            _allSheetNames?.ForEach(s => { if (s.Contains("寝台車") || s.Contains("霊柩車")) NormalSheets.Add(s); if (s.Contains("東日本")) EastSheets.Add(s); });
             SelectedNormalSheet = NormalSheets.FirstOrDefault();
             SelectedEastSheet = EastSheets.FirstOrDefault();
         }
 
         private void UpdatePreview()
         {
-            if (string.IsNullOrEmpty(SelectedNormalSheet))
-            {
-                PreviewData.Clear();
-                return;
-            }
+            if (string.IsNullOrEmpty(SelectedNormalSheet)) { PreviewData.Clear(); return; }
             ;
-
             PreviewData.Clear();
             var data = _excelHandler.GetSheetDataForPreview(SelectedNormalSheet);
-            foreach (var item in data)
-            {
-                PreviewData.Add(item);
-            }
+            foreach (var item in data) { PreviewData.Add(item); }
         }
 
         public void UpdateRowData(string sheetName, int rowIndex, Dictionary<string, double?> newValues, bool isKoryo)
@@ -261,21 +213,14 @@ namespace HansoInputTool.ViewModels
             if (!TryParseValue(NormalDay, "日(B)", out var dayVal)) return; values["日(B)"] = dayVal;
             if (!TryParseValue(NormalYuryoKm, "有料キロ(D)", out var yuryoKmVal)) return; values["有料キロ(D)"] = yuryoKmVal;
             if (!TryParseValue(NormalMuryoKm, "無料キロ(E)", out var muryoKmVal)) return; values["無料キロ(E)"] = muryoKmVal;
-            if (IsOotsukiSheet)
-            {
-                if (!TryParseValue(NormalLateValue, "深夜料金(H)", out var lateVal)) return; values["深夜料金(H)"] = lateVal;
-            }
-            else
-            {
-                if (!TryParseValue(NormalLateValue, "深夜時間(K)", out var lateVal)) return; values["深夜時間(K)"] = lateVal;
-            }
+            if (IsOotsukiSheet) { if (!TryParseValue(NormalLateValue, "深夜料金(H)", out var lateVal)) return; values["深夜料金(H)"] = lateVal; }
+            else { if (!TryParseValue(NormalLateValue, "深夜時間(K)", out var lateVal)) return; values["深夜時間(K)"] = lateVal; }
 
             try
             {
                 var (targetRow, insertInfo) = _excelHandler.RegisterNormalData(SelectedNormalSheet, values, IsKoryo);
                 if (!string.IsNullOrEmpty(insertInfo)) Log($"[{SelectedNormalSheet}] {insertInfo}");
                 Log($"[{SelectedNormalSheet}] の {targetRow}行目にデータを登録しました。(ファイル未保存)");
-
                 NormalDay = NormalYuryoKm = NormalMuryoKm = NormalLateValue = string.Empty;
                 IsKoryo = false;
                 UpdatePreview();
@@ -283,7 +228,8 @@ namespace HansoInputTool.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"登録エラー: {ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                Logger.Error(ex, "通常シートへのデータ登録中にエラーが発生しました。");
+                MessageBox.Show($"登録エラーが発生しました。\n詳細はログファイルを確認してください。", "登録エラー", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -298,44 +244,32 @@ namespace HansoInputTool.ViewModels
             if (!TryParseValue(EastMuryoKm, "無料キロ数", out var muryo)) return; values["無料キロ数"] = muryo;
             if (!TryParseValue(EastUnso, "運輸実績", out var unso)) return; values["運輸実績"] = unso;
 
-            _excelHandler.RegisterEastData(SelectedEastSheet, values);
-            Log($"[{SelectedEastSheet}] のデータを登録しました。(ファイル未保存)");
-
-            if (!_registeredEastSheets.Contains(SelectedEastSheet))
+            try
             {
-                _registeredEastSheets.Add(SelectedEastSheet);
+                _excelHandler.RegisterEastData(SelectedEastSheet, values);
+                Log($"[{SelectedEastSheet}] のデータを登録しました。(ファイル未保存)");
+                if (!_registeredEastSheets.Contains(SelectedEastSheet)) { _registeredEastSheets.Add(SelectedEastSheet); }
+                UpdateEastSheetStatus();
+                EastJitsudo = EastHanso = EastYuryoKm = EastMuryoKm = EastUnso = string.Empty;
+                RequestFocusEastTab?.Invoke();
             }
-            UpdateEastSheetStatus();
-
-            EastJitsudo = EastHanso = EastYuryoKm = EastMuryoKm = EastUnso = string.Empty;
-            RequestFocusEastTab?.Invoke();
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "東日本シートへのデータ登録中にエラーが発生しました。");
+                MessageBox.Show($"登録エラーが発生しました。\n詳細はログファイルを確認してください。", "登録エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void UpdateEastSheetStatus()
         {
-            if (string.IsNullOrEmpty(SelectedEastSheet))
-            {
-                IsEastSheetRegistered = false;
-                EastSheetStatus = "";
-                return;
-            }
-
-            if (_registeredEastSheets.Contains(SelectedEastSheet))
-            {
-                IsEastSheetRegistered = true;
-                EastSheetStatus = "✅ 登録完了";
-            }
-            else
-            {
-                IsEastSheetRegistered = false;
-                EastSheetStatus = "（未登録）";
-            }
+            if (string.IsNullOrEmpty(SelectedEastSheet)) { IsEastSheetRegistered = false; EastSheetStatus = ""; return; }
+            if (_registeredEastSheets.Contains(SelectedEastSheet)) { IsEastSheetRegistered = true; EastSheetStatus = "✅ 登録完了"; }
+            else { IsEastSheetRegistered = false; EastSheetStatus = "（未登録）"; }
         }
 
         private async Task StartTransfer()
         {
             if (!int.TryParse(Period, out var period) || !int.TryParse(Month, out var month) || !int.TryParse(RNumber, out var rNum)) { MessageBox.Show("期、月、R番号を正しく入力してください。", "エラー", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-
             var dialog = new OpenFileDialog { Title = "出力先のベースフォルダを選択してください", CheckFileExists = false, CheckPathExists = true, FileName = "フォルダを選択", Filter = "Folder|.", ValidateNames = false, DereferenceLinks = true };
             if (dialog.ShowDialog() != true) { Log("フォルダ選択がキャンセルされました。"); return; }
             string outputDir = Path.GetDirectoryName(dialog.FileName);
@@ -359,13 +293,10 @@ namespace HansoInputTool.ViewModels
                     string shukeiFilename = $"{period}期 {month}月 R{rNum} アルス搬送・霊柩車　実績月報集計.xlsx";
                     string shukeiFilepath = Path.Combine(finalOutputDir, shukeiFilename);
                     File.Copy(BundledTemplateFilePath, shukeiFilepath, true);
-
                     using var wbGeppo = new ExcelPackage(new FileInfo(geppoFilepath));
                     using var wbShukei = new ExcelPackage(new FileInfo(shukeiFilepath));
-
                     Log("--- 全シートの転記処理を開始 ---");
                     Application.Current.Dispatcher.Invoke(() => progressVM.AppendLog("--- 全シートの転記処理を開始 ---"));
-
                     var sheetsToProcess = _allSheetNames?.Where(s => !s.Contains("登録")).ToList() ?? new List<string>();
                     int processedCount = 0;
                     foreach (var sheetName in sheetsToProcess)
@@ -377,15 +308,15 @@ namespace HansoInputTool.ViewModels
                     wbShukei.Save();
                     wbGeppo.Save();
                 });
-
                 Log("========\n転記完了\n========");
                 Period = Month = RNumber = string.Empty;
                 progressVM.Complete("2つのファイルの作成が完了しました。");
             }
             catch (Exception ex)
             {
+                Logger.Error(ex, "転記処理中にエラーが発生しました。");
                 Log($"エラー: {ex.Message}");
-                progressVM.ErrorComplete($"エラーが発生しました: {ex.Message}");
+                progressVM.ErrorComplete($"エラーが発生しました: 詳細はログファイルを確認してください。");
             }
             finally
             {
@@ -401,7 +332,6 @@ namespace HansoInputTool.ViewModels
             {
                 var result = MessageBox.Show("選択したファイルの内容で現在の作業内容を上書きします。\nよろしいですか？（保存していない入力内容は失われます）", "上書き確認", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
                 if (result == MessageBoxResult.Cancel) return;
-
                 try
                 {
                     File.Copy(openFileDialog.FileName, WorkInputFilePath, true);
@@ -414,7 +344,8 @@ namespace HansoInputTool.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"ファイルの読み込みに失敗しました。\n{ex}", "読み込みエラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Logger.Error(ex, "実績月報ファイルの読み込み中にエラーが発生しました。");
+                    MessageBox.Show($"ファイルの読み込みに失敗しました。\n詳細はログファイルを確認してください。", "読み込みエラー", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
@@ -429,7 +360,8 @@ namespace HansoInputTool.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"保存に失敗しました。\n{ex.Message}", "保存エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                Logger.Error(ex, "入力内容の保存中にエラーが発生しました。");
+                MessageBox.Show($"保存に失敗しました。\n詳細はログファイルを確認してください。", "保存エラー", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -438,16 +370,11 @@ namespace HansoInputTool.ViewModels
             Log("--- Input.xlsx のデータクリア処理を開始 ---");
             var logMessages = _excelHandler.ClearData();
             foreach (var msg in logMessages) Log(msg);
-
             _registeredEastSheets.Clear();
             UpdateEastSheetStatus();
-
             SaveInputFile(null);
             UpdatePreview();
-            if (showSuccessMessage)
-            {
-                MessageBox.Show("Input.xlsx の入力データをクリアし、保存しました。", "クリア完了", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
+            if (showSuccessMessage) { MessageBox.Show("Input.xlsx の入力データをクリアし、保存しました。", "クリア完了", MessageBoxButton.OK, MessageBoxImage.Information); }
         }
 
         private async Task CheckForUpdate()
@@ -458,31 +385,17 @@ namespace HansoInputTool.ViewModels
 
         private void Log(string message)
         {
-            void updateAction()
-            {
-                _logBuilder.AppendLine(message);
-                LogText = _logBuilder.ToString();
-            }
-
-            if (Application.Current.Dispatcher.CheckAccess())
-            {
-                updateAction();
-            }
-            else
-            {
-                Application.Current.Dispatcher.Invoke(updateAction);
-            }
+            Logger.Info(message);
+            void updateAction() { _logBuilder.AppendLine(message); LogText = _logBuilder.ToString(); }
+            if (Application.Current.Dispatcher.CheckAccess()) { updateAction(); }
+            else { Application.Current.Dispatcher.Invoke(updateAction); }
         }
 
         private static bool TryParseValue(string input, string fieldName, out double? result)
         {
             result = null;
             if (string.IsNullOrWhiteSpace(input)) return true;
-            if (double.TryParse(input, out double parsedValue))
-            {
-                result = parsedValue;
-                return true;
-            }
+            if (double.TryParse(input, out double parsedValue)) { result = parsedValue; return true; }
             MessageBox.Show($"「{input}」は {fieldName} の数値として認識できません。", "入力エラー", MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
         }
@@ -506,7 +419,6 @@ namespace HansoInputTool.ViewModels
         {
             if (SelectedRow == null) return;
             var result = MessageBox.Show($"選択した行({SelectedRow.RowIndex}行目)を削除しますか？\nこの操作は元に戻せません。", "削除確認", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-
             if (result == MessageBoxResult.Yes)
             {
                 _excelHandler.DeleteRows(SelectedNormalSheet, new List<int> { SelectedRow.RowIndex });
