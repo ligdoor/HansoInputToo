@@ -22,7 +22,9 @@ namespace HansoInputTool.Services
 
         static ExcelHandler()
         {
-            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            // [EPPlus 8対応] LicenseContextはEPPlus 8で非推奨（obsolete）になったため、
+            // 新しいLicense APIに変更。※「アルス」の部分は実際の組織名に置き換えてください。
+            ExcelPackage.License.SetNonCommercialOrganization("アルス");
         }
 
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();

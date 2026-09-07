@@ -44,8 +44,9 @@ namespace HansoInputTool.Services
                     return new Statistics();
                 }
 
-                // EPPlus 8の新しいライセンス設定方法
-                OfficeOpenXml.ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
+                // [EPPlus 8対応] LicenseContextはEPPlus 8で非推奨（obsolete）になったため、
+                // 新しいLicense APIに変更。※「アルス」の部分は実際の組織名に置き換えてください。
+                OfficeOpenXml.ExcelPackage.License.SetNonCommercialOrganization("アルス");
 
                 using (var package = new ExcelPackage(new FileInfo(reportFile.FilePath)))
                 {

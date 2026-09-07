@@ -108,7 +108,9 @@ namespace HansoInputTool.Services
 
                 try
                 {
-                    ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+                    // [EPPlus 8対応] LicenseContextはEPPlus 8で非推奨（obsolete）になったため、
+                    // 新しいLicense APIに変更。※「アルス」の部分は実際の組織名に置き換えてください。
+                    ExcelPackage.License.SetNonCommercialOrganization("アルス");
                     using var pkg = new ExcelPackage(new FileInfo(filePath));
 
                     foreach (var ws in pkg.Workbook.Worksheets)
@@ -197,7 +199,9 @@ namespace HansoInputTool.Services
 
                 try
                 {
-                    ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+                    // [EPPlus 8対応] LicenseContextはEPPlus 8で非推奨（obsolete）になったため、
+                    // 新しいLicense APIに変更。※「アルス」の部分は実際の組織名に置き換えてください。
+                    ExcelPackage.License.SetNonCommercialOrganization("アルス");
                     using var pkg = new ExcelPackage(new FileInfo(filePath));
 
                     foreach (var ws in pkg.Workbook.Worksheets)
@@ -244,7 +248,9 @@ namespace HansoInputTool.Services
             int startYear, int startMonth,
             int endYear,   int endMonth)
         {
-            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            // [EPPlus 8対応] LicenseContextはEPPlus 8で非推奨（obsolete）になったため、
+            // 新しいLicense APIに変更。※「アルス」の部分は実際の組織名に置き換えてください。
+            ExcelPackage.License.SetNonCommercialOrganization("アルス");
             using var pkg = new ExcelPackage();
             var ws = pkg.Workbook.Worksheets.Add("車両別年度集計");
 
