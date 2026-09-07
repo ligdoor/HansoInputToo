@@ -170,8 +170,11 @@ namespace HansoInputTool.Services
                 int writeRow = 3;
 
                 // [No.3修正] DB使用時の集計値はdbRowsから直接計算する
-                int dbTotalDays = 0, dbTotalHanso = 0;
+                int dbTotalHanso = 0;
                 double dbTotalYuryoKm = 0, dbTotalMuryoKm = 0;
+                // [転記出力修正] 延実在車輌数／使用日数は「同じ日に何件動いても1日として1回」カウントする。
+                // 同一日に複数行（複数搬送）がある場合でも重複カウントしないよう、日付の集合(HashSet)で管理する。
+                var usedDaysSet = new HashSet<int>();
 
                 foreach (var dbRow in dbRows)
                 {
@@ -258,13 +261,16 @@ namespace HansoInputTool.Services
                     totalSum    += rowTotal;
 
                     // [No.3修正] dbRowsから集計値を直接計算
-                    if (dbRow.B_Day.HasValue) dbTotalDays++;
+                    // [転記出力修正] 使用日数・延実在車輌数は搬送件数ではなく「稼働した日」の数として数える
+                    if (dbRow.B_Day.HasValue) usedDaysSet.Add(dbRow.B_Day.Value);
                     dbTotalHanso  += hansoVal;
                     dbTotalYuryoKm += yuryoKm;
                     dbTotalMuryoKm += muryoKm;
 
                     writeRow++;
                 }
+
+                int dbTotalDays = usedDaysSet.Count;
 
                 // [No.4修正] 実績月報（wsGeppo）103行目（合計行）にも使用・搬送・有料・無料の集計値を書き込む。
                 // 合計行にはテンプレート由来のCOUNT/SUM数式が残っているが、EPPlusは保存時に再計算しないため
@@ -390,16 +396,20 @@ namespace HansoInputTool.Services
 
         private (int days, int hanso, double yuryoKm, double muryoKm) CalculateTotals(ExcelWorksheet ws, int totalRowIdx, SheetColumnMap map)
         {
-            int totalDays = 0, totalHanso = 0;
+            int totalHanso = 0;
             double totalYuryoKm = 0, totalMuryoKm = 0;
+            // [転記出力修正] 延実在車輌数／使用日数は「同じ日に何件動いても1日として1回」カウントする。
+            // 同一日に複数行（複数搬送）が入力されていても重複カウントしないよう、日付の集合(HashSet)で管理する。
+            var usedDaysSet = new HashSet<object>();
             for (int row = 3; row < totalRowIdx; row++)
             {
-                if (ws.Cells[row, map.Day].Value != null) totalDays++;
+                var dayVal = ws.Cells[row, map.Day].Value;
+                if (dayVal != null) usedDaysSet.Add(dayVal);
                 totalHanso += GetInt(ws.Cells[row, map.HansoCount].Value);
                 totalYuryoKm += GetDouble(ws.Cells[row, map.YuryoKm].Value);
                 totalMuryoKm += GetDouble(ws.Cells[row, map.MuryoKm].Value);
             }
-            return (totalDays, totalHanso, totalYuryoKm, totalMuryoKm);
+            return (usedDaysSet.Count, totalHanso, totalYuryoKm, totalMuryoKm);
         }
 
         // ===== 給油管理表への書き込み =====
